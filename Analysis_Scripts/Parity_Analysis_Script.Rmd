@@ -1,0 +1,310 @@
+---
+title: "Parity SNARC data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load packages
+
+```{r}
+if(!require(knitr)) install.packages("knitr")
+library(knitr)
+
+if(!require(here)) install.packages("here")
+library(here)
+
+if(!require(readxl)) install.packages("readxl")
+library(readxl)
+
+if(!require(ggplot2)) install.packages("ggplot2")
+library(ggplot2)
+
+if(!require(dplyr)) install.packages("dplyr")
+library(dplyr)
+
+if(!require(tidyr)) install.packages("tidyr")
+library(tidyr)
+
+if(!require(afex)) install.packages("afex")
+library(afex)
+
+if(!require(lme4)) install.packages("lme4")
+library(lme4)
+
+if(!require(lmerTest)) install.packages("lmerTest")
+library(lmerTest)
+
+if(!require(Rmisc)) install.packages("Rmisc")
+library(Rmisc)
+
+if(!require(BayesFactor)) install.packages("BayesFactor")
+library(here)
+
+if(!require(emmeans)) install.packages("emmeans")
+library(emmeans)
+
+if(!require(gridExtra)) install.packages("gridExtra")
+library(here)
+
+if(!require(ez)) install.packages("ez")
+library(ez)
+
+if(!require(WebPower)) install.packages("WebPower")
+library(WebPower)
+
+if(!require(effsize)) install.packages("effsize")
+library(effsize)
+
+if(!require(gridExtra)) install.packages("gridExtra")
+library(gridExtra)
+```
+
+## Load data
+
+```{r}
+dat <- read_excel(here::here("Parity_DvN_SNARC/Data/Final Data parity.xlsx"))
+```
+
+## Create plot theme
+
+This theme is used for every plot within the manuscript. 
+
+```{r}
+theme_plot <- theme(axis.title.x = element_text(size = 15), axis.text.x = element_text(size = 15), axis.title.y = element_text(size = 15), axis.text.y = element_text(size = 15), title = element_text(size = 18), legend.title = element_text(size = 15), legend.text = element_text(size = 15), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+
+## Cleaning up data columns
+
+```{r}
+"selecting relevant columns for analysis"
+dat_clean <- dat %>%
+  dplyr::select(Condition, number, correctkey, Congruent, participant, key_response = exp_number_key_resp.keys, correct = exp_number_key_resp.corr, rt = resp.rt, exp_sess_trials.thisRepN,  exp_sess_trials.thisTrialN, exp_sess_trials.thisN, exp_sess_trials.thisIndex) %>%
+  dplyr::mutate(x = row_number())
+
+"creating magnitude and hand identifies"
+dat_clean <- dat_clean %>%
+  dplyr::mutate(magnitude = case_when(number < 3 ~ "small",
+                                      number > 3 ~ "large"),
+                hand = case_when(key_response == "a" ~ "left",
+                                 key_response == "l" ~ "right")) %>%
+  dplyr::arrange(number) %>%
+  dplyr::mutate(x = row_number())
+
+"creating participant tag"
+ppid <- dat_clean %>%
+  dplyr::group_by(participant) %>%
+  dplyr::slice(1) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(ppid = row_number()) %>%
+  dplyr::select(participant, ppid)
+
+"merging tag with main dataframe"
+dat_clean <- merge(dat_clean, ppid, by = c("participant"))
+```
+
+## Calculating participant means and SDs for outliers 
+
+The next chunk removes outlier participants by calculating the mean + 3 SDs
+
+1) First we create a tag for reaction times that are too fast
+
+2) We then calculate whether responses are more than 3 SD above the mean for each condition. This accounts for any variation in mean values within each condition and thus is a more stringent test of outliers.
+
+3) merging mean + 3 * SD dataframe to main dataframes 
+
+4) Identify whether any of the reaction times were larger than 3 SDs above the condition mean. If so, label as outlier. 
+
+5) convert RT to ms
+
+```{r}
+"1) filtering out physiologically implausible RTs (i.e. < .15 s)"
+dat_clean <- dat_clean %>%
+  dplyr::filter(correct == 1) %>%
+  dplyr::filter(rt >= 0.15)
+
+"2) calculating participant means and sds for RTs"
+meanrt_ppid <- dat_clean %>%
+  dplyr::filter(correct == 1) %>%
+  dplyr::group_by(ppid, hand, Congruent, magnitude) %>%
+  dplyr::summarise(mean_rt = mean(rt), sd_rt = sd(rt)) %>%
+  dplyr::mutate(mean_3_sd = mean_rt + (3 * sd_rt))
+
+"3) merging 3 SD threshold with main dataframe"
+dat_clean <- merge(dat_clean, meanrt_ppid, by = c("ppid", "hand", "Congruent", "magnitude"))
+
+"4) producing outliers tag"
+dat_clean <- dat_clean %>%
+  dplyr::group_by(ppid, hand, Congruent, magnitude) %>%
+  dplyr::mutate(outlier = rt >= mean_3_sd) 
+
+"5) converting RT to milliseconds"
+dat_clean <- dat_clean %>%
+  dplyr::mutate(ms = rt * 1000)
+```
+
+## RM ANOVA for reaction time data - Symbolic numerals (digits)
+
+1) RM ANOVA on the data. 
+
+2) Some descriptive stats on the data (i.e. means of magnitude, hand, and congruency conditions). 
+
+3) first we calculate the mean and confidence intervals from the data. Then we use these to plot the SNARC effects and save out. 
+
+4) plots for congruent and incongruent SNARC plots.
+
+```{r}
+"1) RM ANOVA for symbolic numerals"
+aov.digits <- aov_car(ms ~ hand * magnitude * Congruent + Error(ppid/hand * magnitude * Congruent), anova_table = list(es = "pes"),
+                      data = dat_clean %>%
+                        dplyr::filter(Condition == "Digit", outlier == FALSE))
+
+aov.digits
+
+"2) descriptives"
+dat_clean %>%
+  dplyr::filter(Condition == "Digit", outlier == FALSE) %>%
+  dplyr::group_by(Congruent, hand, magnitude) %>%
+  dplyr::summarise(m = mean(ms))
+
+"3) calculating mean and SEMs for confidence intervals"
+summary.digits <- summarySE(dat_clean %>%
+                              dplyr::filter(Condition == "Digit", outlier == FALSE), measurevar = "ms", groupvars = c("hand", "magnitude", "Congruent"))
+
+"4) plots for congruent and incongruent SNARC"
+congruent.snarc <- ggplot() +
+  geom_point(data = summary.digits %>%
+               dplyr::filter(Congruent == "Cong") %>%
+               dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))) %>%
+               dplyr::mutate(hand = factor(hand, levels = c("left", "right"))), mapping = aes(x = magnitude, y = ms)) +
+  geom_line(data = summary.digits %>%
+              dplyr::filter(Congruent == "Cong") %>%
+              dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))) %>%
+              dplyr::mutate(hand = factor(hand, levels = c("left", "right"))), mapping = aes(x = magnitude, linetype = as.factor(hand), group = as.factor(hand), y = ms)) +
+  geom_errorbar(data = summary.digits %>%
+               dplyr::filter(Congruent == "Cong") %>%
+                 dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))) %>%
+                 dplyr::mutate(hand = factor(hand, levels = c("left", "right"))), mapping = aes(x = magnitude, y = ms, ymin = ms - se, ymax = ms + se), width = 0.1) +
+  scale_x_discrete(labels = c('Small','Large')) +
+  scale_linetype_manual(name = "Response hand", labels = c("Left", "Right"),  values = c("solid", "dotted")) +
+  ggtitle("A: Congruent") +
+  ylim(500, 650) +
+  ylab("Reaction time (ms)") +
+  xlab("Number magnitude") +
+  theme_plot +
+  theme(legend.position = c(0.25, 0.85), legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7))
+  
+  
+incongruent.snarc <- ggplot() +
+  geom_point(data = summary.digits %>%
+               dplyr::filter(Congruent == "Incong") %>%
+               dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))) %>%
+               dplyr::mutate(hand = factor(hand, levels = c("left", "right"))), mapping = aes(x = magnitude, y = ms)) +
+  geom_line(data = summary.digits %>%
+              dplyr::filter(Congruent == "Incong") %>%
+              dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))) %>%
+              dplyr::mutate(hand = factor(hand, levels = c("left", "right"))), mapping = aes(x = magnitude, linetype = as.factor(hand), group = as.factor(hand), y = ms)) +
+  geom_errorbar(data = summary.digits %>%
+                  dplyr::filter(Congruent == "Incong") %>%
+                  dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))) %>%
+                  dplyr::mutate(hand = factor(hand, levels = c("left", "right"))), mapping = aes(x = magnitude, y = ms, ymin = ms - se, ymax = ms + se), width = 0.1) +
+  scale_x_discrete(labels = c('Small','Large')) +
+  scale_linetype_manual(name = "Response hand", labels = c("Left", "Right"),  values = c("solid", "dotted")) +
+  ggtitle("B: Incongruent") +
+  ylim(500, 650) +
+  ylab("Reaction time (ms)") +
+  xlab("Number magnitude") +
+  theme_plot +
+  theme(legend.position = "none", legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7))
+
+"saving plots"
+g <- arrangeGrob(congruent.snarc, incongruent.snarc, nrow = 1)
+  ggsave(here::here("Parity_DvN_SNARC/Plots/Digits.tiff"), g,  width = 15, height = 7, units = 'cm', dpi = 900, type = 'cairo')
+```
+
+## RM ANOVA for reaction time data - Non-symbolic numerals (numerosity)
+
+1) First we filter out outliers, and switch the magnitude for incongruent conditions. We do this because "magnitude" actually relates to the magnitude of the number digit. For numerosity, we need to alter this. When the conditions are congruent, the numerosity magnitude is the same as the number magnitude (i.e. number < 3 = small, number > 3 = large). When incongruent, numerosity magnitude is the opposite of number magnitude (i.e. number < 3 = large, number > 3 = small). 
+
+Once this is done, the ANOVA is computed. 
+
+2) Descriptive stats for hand, magnitude and congrunecy conditions
+
+3) computing means and SEMs for plotting.
+
+4) plotting SNARC for congruent and incongruent conditions for the numerosity conditions. 
+
+```{r}
+"1) RM ANOVA"
+numerosity.dat <- dat_clean %>%
+  dplyr::ungroup() %>%
+  dplyr::filter(Condition == "Numerosity", outlier == FALSE) %>%
+  dplyr::mutate(magnitude = case_when(number < 3 & Congruent ==  "Incong" ~ "large",
+                                      number > 3 & Congruent ==  "Incong" ~ "small",
+                                      number < 3 & Congruent == "Cong" ~ "small",
+                                      number > 3 & Congruent == "Cong" ~ "large"))
+
+aov.n <- aov_car(ms ~ hand * magnitude * Congruent + Error(ppid/hand * magnitude * Congruent),
+                 anova_table = list(es = "pes"),
+                 data = numerosity.dat)
+aov.n
+
+"2) descriptives"
+numerosity.dat %>%
+  dplyr::group_by(Congruent, hand, magnitude) %>%
+  dplyr::summarise(m = mean(ms))
+
+"3)"
+summary.n <- summarySE(numerosity.dat, measurevar = "ms", groupvars = c("hand", "magnitude", "Congruent"))
+
+"4) SNARC plots for numerosity condition"
+congruent.snarc <- ggplot() +
+  geom_point(data = summary.n %>%
+               dplyr::filter(Congruent == "Cong") %>%
+               dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))), mapping = aes(x = magnitude, y = ms)) +
+  geom_line(data = summary.n %>%
+              dplyr::filter(Congruent == "Cong") %>%
+              dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))), mapping = aes(x = magnitude, linetype = as.factor(hand), group = as.factor(hand), y = ms)) +
+  geom_errorbar(data = summary.n %>%
+                  dplyr::filter(Congruent == "Cong") %>%
+                  dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))), mapping = aes(x = magnitude, y = ms, ymin = ms - se, ymax = ms + se), width = 0.1) +
+  scale_x_discrete(labels = c('Small','Large')) +
+  scale_linetype_manual(name = "Response hand", labels = c("Left", "Right"),  values = c("solid", "dotted")) +
+  ggtitle("A: Congruent") +
+  ylim(500, 650) +
+  ylab("Reaction time (ms)") +
+  xlab("Non-Symbolic Numerals") +
+  theme_plot +
+  theme(legend.position = c(0.25, 0.85), legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7))  
+
+incongruent.snarc <- ggplot() +
+  geom_point(data = summary.n %>%
+               dplyr::filter(Congruent == "Incong") %>%
+               dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))), mapping = aes(x = magnitude, y = ms)) +
+  geom_line(data = summary.n %>%
+               dplyr::filter(Congruent == "Incong") %>%
+               dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))), mapping = aes(x = magnitude, linetype = as.factor(hand), group = as.factor(hand), y = ms)) +
+  geom_errorbar(data = summary.n %>%
+               dplyr::filter(Congruent == "Incong") %>%
+               dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))), mapping = aes(x = magnitude, y = ms, ymin = ms - se, ymax = ms + se), width = 0.1) +
+  scale_x_discrete(labels = c('Small','Large')) +
+  scale_linetype_manual(name = "Response hand", labels = c("Left", "Right"),  values = c("solid", "dotted")) +
+  ggtitle("B: Incongruent") +
+  ylim(500, 650) +
+  ylab("Reaction time (ms)") +
+  xlab("Non-Symbolic Numerals") +
+  theme_plot +
+  theme(legend.position = "none", legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7))  
+
+"plot saving"
+g <- arrangeGrob(congruent.snarc, incongruent.snarc, nrow = 1)
+  ggsave(here::here("Parity_DvN_SNARC/Plots/Num.tiff"), g,  width = 15, height = 7, units = 'cm', dpi = 900, type = 'cairo')
+```
+
+
+
+
