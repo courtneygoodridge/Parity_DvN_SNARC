@@ -224,7 +224,7 @@ summary.digits <- summarySE(dat_clean %>%
                               dplyr::filter(Condition == "Digit", outlier == FALSE), measurevar = "ms", groupvars = c("hand", "magnitude", "Congruent"))
 
 "4) plots for congruent and incongruent SNARC"
-congruent.snarc <- ggplot() +
+congruent.snarc.digits <- ggplot() +
   geom_point(data = summary.digits %>%
                dplyr::filter(Congruent == "Cong") %>%
                dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))) %>%
@@ -247,7 +247,7 @@ congruent.snarc <- ggplot() +
   theme(legend.position = c(0.25, 0.85), legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7))
   
   
-incongruent.snarc <- ggplot() +
+incongruent.snarc.digits <- ggplot() +
   geom_point(data = summary.digits %>%
                dplyr::filter(Congruent == "Incong") %>%
                dplyr::mutate(magnitude = factor(magnitude, levels = c("small", "large"))) %>%
@@ -270,7 +270,7 @@ incongruent.snarc <- ggplot() +
   theme(legend.position = "none", legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7))
 
 "saving plots"
-g <- arrangeGrob(congruent.snarc, incongruent.snarc, nrow = 1)
+g <- arrangeGrob(congruent.snarc.digits, incongruent.snarc.digits, nrow = 1)
   ggsave(here::here("Parity_DvN_SNARC/Plots/Digits.tiff"), g,  width = 15, height = 7, units = 'cm', dpi = 900, type = 'cairo')
 ```
 
@@ -395,6 +395,9 @@ aov.n <- aov_car(ms ~ hand * magnitude_new * Congruent + Error(ppid/hand * magni
                  data = numerosity.dat)
 aov.n
 
+aov.n.em <- emmeans(aov.n, c("hand", "magnitude_new", "Congruent"))
+pairs(aov.n.em)
+
 "2) descriptives"
 numerosity.dat %>%
   dplyr::group_by(Congruent, hand, magnitude_new) %>%
@@ -404,7 +407,7 @@ numerosity.dat %>%
 summary.n <- summarySE(numerosity.dat, measurevar = "ms", groupvars = c("hand", "magnitude_new", "Congruent"))
 
 "4) SNARC plots for numerosity condition"
-congruent.snarc <- ggplot() +
+congruent.snarc.n <- ggplot() +
   geom_point(data = summary.n %>%
                dplyr::filter(Congruent == "Cong") %>%
                dplyr::mutate(magnitude_new = factor(magnitude_new, levels = c("small", "large"))), mapping = aes(x = magnitude_new, y = ms)) +
@@ -423,7 +426,7 @@ congruent.snarc <- ggplot() +
   theme_plot +
   theme(legend.position = c(0.25, 0.85), legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7))  
 
-incongruent.snarc <- ggplot() +
+incongruent.snarc.n <- ggplot() +
   geom_point(data = summary.n %>%
                dplyr::filter(Congruent == "Incong") %>%
                dplyr::mutate(magnitude_new = factor(magnitude_new, levels = c("small", "large"))), mapping = aes(x = magnitude_new, y = ms)) +
@@ -443,8 +446,97 @@ incongruent.snarc <- ggplot() +
   theme(legend.position = "none", legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7))  
 
 "plot saving"
-g <- arrangeGrob(congruent.snarc, incongruent.snarc, nrow = 1)
+g <- arrangeGrob(congruent.snarc.n, incongruent.snarc.n, nrow = 1)
   ggsave(here::here("Parity_DvN_SNARC/Plots/Num.tiff"), g,  width = 15, height = 7, units = 'cm', dpi = 900, type = 'cairo')
+```
+
+# Numerosity data - lineare regression
+
+```{r}
+"1) Congruent"
+drt.congruent.digits <- numerosity.dat %>%
+  dplyr::filter(Congruent == "Cong", ppid != 45, ppid != 5, outlier == FALSE) %>%
+  dplyr::group_by(number, key_response, ppid) %>%
+  dplyr::summarise(meanMS = mean(ms)) %>%
+  dplyr::ungroup() %>%
+  tidyr::pivot_wider(names_from = key_response, values_from = meanMS) %>%
+  dplyr::group_by(number, ppid) %>%
+  dplyr::summarise(drt = (l - a)) %>%
+  tidyr::drop_na()
+
+# frequentist linear regression on mean drt values
+congruent.digits.mod <- lm(drt ~ number, data = drt.congruent.digits %>%
+                        dplyr::group_by(number) %>%
+                        dplyr::summarise(drt = mean(drt)))
+
+summary(congruent.digits.mod)
+
+# bayesian regression on mean drt values
+regressionBF(drt ~ number, data = drt.congruent.digits %>%
+               dplyr::group_by(number) %>%
+               dplyr::summarise(drt = mean(drt)))
+
+# calculating mean and SEM of drt
+drt.congruent.error <- summarySE(drt.congruent.digits, measurevar = "drt", groupvars = c("number"))
+
+# plotting linear regression of drt for congruent condition
+drt.congruent.plot <- ggplot() +
+  geom_hline(yintercept = 0) +
+  geom_point(data = drt.congruent.error, mapping = aes(x = number, y = drt)) +
+  geom_abline(slope = coef(congruent.digits.mod)["number"], 
+              intercept = coef(congruent.digits.mod)["(Intercept)"], linetype = "dashed") +
+  geom_errorbar(data = drt.congruent.error, mapping = aes(x = number, y = drt, ymin = drt - se, ymax = drt + se), width = 0.1) +
+  ylim(-50, 50) +
+  ggtitle("A: Congruent") +
+  ylab("dRT (ms)") +
+  xlab("Number") +
+  theme_plot +
+  theme(legend.position = c(0.25, 0.85), legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7)) 
+
+"2) Incongruent"
+drt.incongruent.digits <- numerosity.dat %>%
+  dplyr::filter(Congruent == "Incong", ppid != 45, ppid != 5, outlier == FALSE) %>%
+  dplyr::group_by(number, key_response, ppid) %>%
+  dplyr::summarise(meanMS = mean(ms)) %>%
+  dplyr::ungroup() %>%
+  tidyr::pivot_wider(names_from = key_response, values_from = meanMS) %>%
+  dplyr::group_by(number, ppid) %>%
+  dplyr::summarise(drt = (l - a)) %>%
+  tidyr::drop_na()
+
+# frequentist linear regression on mean drt values
+incongruent.digits.mod <- lm(drt ~ number, data = drt.incongruent.digits %>%
+                        dplyr::group_by(number) %>%
+                        dplyr::summarise(drt = mean(drt)))
+
+summary(incongruent.digits.mod)
+
+# bayesian regression on mean drt values
+regressionBF(drt ~ number, data = drt.incongruent.digits %>%
+               dplyr::group_by(number) %>%
+               dplyr::summarise(drt = mean(drt)))
+
+
+# mean and SEM of drt
+drt.incongruent.error <- summarySE(drt.incongruent.digits, measurevar = "drt", groupvars = c("number"))
+
+# plotting linear regression of drt for congruent condition
+drt.incongruent.plot <- ggplot() +
+  geom_hline(yintercept = 0) +
+  geom_point(data = drt.incongruent.error, mapping = aes(x = number, y = drt)) +
+  geom_abline(slope = coef(incongruent.digits.mod)["number"], 
+              intercept = coef(incongruent.digits.mod)["(Intercept)"], linetype = "dashed") +
+  geom_errorbar(data = drt.incongruent.error, mapping = aes(x = number, y = drt, ymin = drt - se, ymax = drt + se), width = 0.1) +
+  ylim(-50, 50) +
+  ggtitle("B: Incongruent") +
+  ylab("dRT (ms)") +
+  xlab("Number") +
+  theme_plot +
+  theme(legend.position = c(0.25, 0.85), legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7)) 
+
+"saving plots"
+g <- arrangeGrob(drt.congruent.plot, drt.incongruent.plot, nrow = 1)
+  ggsave(here::here("Parity_DvN_SNARC/Plots/Numerosity_Linear.tiff"), g,  width = 15, height = 7, units = 'cm', dpi = 900, type = 'cairo')
 ```
 
 
