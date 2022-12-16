@@ -77,13 +77,12 @@ theme_plot <- theme(axis.title.x = element_text(size = 15), axis.text.x = elemen
 panel.background = element_blank(), axis.line = element_line(colour = "black"))
 ```
 
-
 ## Cleaning up data columns
 
 ```{r}
 "selecting relevant columns for analysis"
 dat_clean <- dat %>%
-  dplyr::select(Condition, number, correctkey, Congruent, participant, key_response = exp_number_key_resp.keys, correct = exp_number_key_resp.corr, rt = resp.rt, exp_sess_trials.thisRepN,  exp_sess_trials.thisTrialN, exp_sess_trials.thisN, exp_sess_trials.thisIndex) %>%
+  dplyr::select(gender, age, handedness, Condition, number, correctkey, Congruent, participant, key_response = exp_number_key_resp.keys, correct = exp_number_key_resp.corr, rt = resp.rt, exp_sess_trials.thisRepN,  exp_sess_trials.thisTrialN, exp_sess_trials.thisN, exp_sess_trials.thisIndex) %>%
   dplyr::mutate(x = row_number())
 
 "creating magnitude and hand identifies"
@@ -107,6 +106,52 @@ ppid <- dat_clean %>%
 dat_clean <- merge(dat_clean, ppid, by = c("participant"))
 ```
 
+## Calculate demographic information
+
+*Participant 72* has not given their age. Should we remove this data from the sample? 
+
+```{r}
+# total number of participants
+dat_clean %>%
+  dplyr::group_by(ppid) %>%
+  dplyr::slice(1) %>%
+  dplyr::arrange(ppid) %>%
+  View()
+
+# gender split
+dat_clean %>%
+  dplyr::group_by(ppid) %>%
+  dplyr::slice(1) %>%
+  dplyr::arrange(ppid) %>%
+  tidyr::drop_na() %>%
+  dplyr::group_by(gender) %>%
+  dplyr::summarise(n = n()) %>%
+  View()
+
+# handedness split
+dat_clean %>%
+  dplyr::group_by(ppid) %>%
+  dplyr::slice(1) %>%
+  dplyr::arrange(ppid) %>%
+  tidyr::drop_na() %>%
+  dplyr::group_by(handedness) %>%
+  dplyr::summarise(n = n()) %>%
+  View()
+
+# age
+dat_clean %>%
+  dplyr::group_by(ppid) %>%
+  dplyr::slice(1) %>%
+  dplyr::arrange(ppid) %>%
+  tidyr::drop_na() %>%
+  dplyr::ungroup() %>%
+  dplyr::summarise(mean.age = mean(age), sd.age = sd(age), min.age = min(age), max.age = max(age)) %>%
+  View()
+
+# removing participant 72
+dat_clean <- dat_clean %>%
+  dplyr::filter(ppid != 72)
+```
 ## Errors and misses for individual participants
 
 1) Calculates percentage of errors per participant per condition. 
@@ -127,7 +172,8 @@ dat_clean %>%
   dplyr::group_by(Condition, hand, magnitude, ppid) %>%
   dplyr::mutate(perc = (acc_num / sum(acc_num)) * 100) %>%
   dplyr::ungroup() %>%
-  dplyr::filter(correct == 0)
+  dplyr::filter(correct == 0) %>%
+  View()
 
 "2) errors per participant"
 error_ppid <- dat_clean %>%
@@ -137,19 +183,16 @@ error_ppid <- dat_clean %>%
   dplyr::group_by(ppid) %>%
   dplyr::mutate(perc = (acc_num / sum(acc_num)) * 100) %>%
   dplyr::ungroup() %>%
-  dplyr::filter(correct == 0) 
-
-View(error_ppid)
+  dplyr::filter(correct == 0) %>%
+  View()
 
 "3) average number of errors"
 error_ppid %>%
+  dplyr::filter(perc < 20) %>%
   dplyr::summarise(avg_perc = mean(perc), min_perc = min(perc), max_perc = max(perc))
 
-error_ppid %>%
-  dplyr::filter(perc >= 20)
-
 "4) total errors"
-dat_main %>%
+dat_clean %>%
   dplyr::group_by(correct) %>%
   dplyr::summarise(n = n())
 ```
@@ -192,8 +235,35 @@ dat_clean <- dat_clean %>%
 "5) converting RT to milliseconds"
 dat_clean <- dat_clean %>%
   dplyr::mutate(ms = rt * 1000)
+
+"6) total number of outliers"
+dat_clean %>%
+  dplyr::filter(outlier == TRUE) %>%
+  View()
+
+"7) average number of outliers per participant"
+dat_clean %>%
+  dplyr::filter(outlier == TRUE) %>%
+  dplyr::group_by(ppid) %>%
+  dplyr::summarise(n = n()) %>%
+  dplyr::ungroup() %>%
+  dplyr::summarise(mean.outliers = mean(n), min.outliers = min(n), max.outliers = max(n)) %>%
+  View()
 ```
 
+## Calculating number of trials remaining after removiing outliers and incorrect answers
+
+- *Participant 39* has >20% of errors so should be removed.
+- For *participant 20*, when looking at the distribution of responses within each condition, there have less than 70% of responses in one condition. This may skew our estimate of the mean for that condition and thus we might want to consider removing this participant also. 
+
+```{r}
+dat_clean %>%
+  dplyr::filter(outlier == FALSE) %>%
+  dplyr::group_by(hand, Congruent, magnitude, ppid) %>%
+  dplyr::summarise(trial = n()) %>%
+  dplyr::mutate(perc = trial / 40) %>%
+  View()
+```
 
 ## RM ANOVA for reaction time data - Symbolic numerals (digits)
 
@@ -209,19 +279,21 @@ dat_clean <- dat_clean %>%
 "1) RM ANOVA for symbolic numerals"
 aov.digits <- aov_car(ms ~ hand * magnitude * Congruent + Error(ppid/hand * magnitude * Congruent), anova_table = list(es = "pes"),
                       data = dat_clean %>%
-                        dplyr::filter(Condition == "Digit", outlier == FALSE))
+                        dplyr::filter(Condition == "Digit", outlier == FALSE) %>%
+                        dplyr::filter(ppid != 39) %>%
+                        dplyr::filter(ppid != 20))
 
 aov.digits
 
 "2) descriptives"
-dat_clean %>%
-  dplyr::filter(Condition == "Digit", outlier == FALSE) %>%
-  dplyr::group_by(Congruent, hand, magnitude) %>%
-  dplyr::summarise(m = mean(ms))
+View(summarySE(dat_clean %>%
+                 dplyr::filter(Condition == "Digit", ppid != 39, ppid != 20, outlier == FALSE), measurevar = "ms", groupvars = c("Congruent")))
 
 "3) calculating mean and SEMs for confidence intervals"
 summary.digits <- summarySE(dat_clean %>%
-                              dplyr::filter(Condition == "Digit", outlier == FALSE), measurevar = "ms", groupvars = c("hand", "magnitude", "Congruent"))
+                              dplyr::filter(Condition == "Digit", outlier == FALSE) %>%
+                              dplyr::filter(ppid != 39) %>%
+                        dplyr::filter(ppid != 20), measurevar = "ms", groupvars = c("hand", "magnitude", "Congruent"))
 
 "4) plots for congruent and incongruent SNARC"
 congruent.snarc.digits <- ggplot() +
@@ -240,7 +312,7 @@ congruent.snarc.digits <- ggplot() +
   scale_x_discrete(labels = c('Small','Large')) +
   scale_linetype_manual(name = "Response hand", labels = c("Left", "Right"),  values = c("solid", "dotted")) +
   ggtitle("A: Congruent") +
-  ylim(500, 600) +
+  ylim(500, 650) +
   ylab("Reaction time (ms)") +
   xlab("Number magnitude") +
   theme_plot +
@@ -263,7 +335,7 @@ incongruent.snarc.digits <- ggplot() +
   scale_x_discrete(labels = c('Small','Large')) +
   scale_linetype_manual(name = "Response hand", labels = c("Left", "Right"),  values = c("solid", "dotted")) +
   ggtitle("B: Incongruent") +
-  ylim(500, 600) +
+  ylim(500, 650) +
   ylab("Reaction time (ms)") +
   xlab("Number magnitude") +
   theme_plot +
@@ -273,100 +345,6 @@ incongruent.snarc.digits <- ggplot() +
 g <- arrangeGrob(congruent.snarc.digits, incongruent.snarc.digits, nrow = 1)
   ggsave(here::here("Parity_DvN_SNARC/Plots/Digits.tiff"), g,  width = 15, height = 7, units = 'cm', dpi = 900, type = 'cairo')
 ```
-
-## Figure 3: Mean plots for dRT (symbolic numerals - digits)
-
-1) Calculating drt and error bars for congruent condition. This is done for each participant individually. Also calculates linear regression for mean drt for plotting
-
-2) Calculating drt and error bars for incongruent condition. This is done for each participant individually. Also calculates linear regression for mean drt for plotting
-
-```{r}
-"1) Congruent"
-drt.congruent.digits <- dat_clean %>%
-  dplyr::filter(Congruent == "Cong", Condition == "Digit", ppid != 45, ppid != 5, outlier == FALSE) %>%
-  dplyr::group_by(number, key_response, ppid) %>%
-  dplyr::summarise(meanMS = mean(ms)) %>%
-  dplyr::ungroup() %>%
-  tidyr::pivot_wider(names_from = key_response, values_from = meanMS) %>%
-  dplyr::group_by(number, ppid) %>%
-  dplyr::summarise(drt = (l - a)) %>%
-  tidyr::drop_na()
-
-# frequentist linear regression on mean drt values
-congruent.digits.mod <- lm(drt ~ number, data = drt.congruent.digits %>%
-                        dplyr::group_by(number) %>%
-                        dplyr::summarise(drt = mean(drt)))
-
-summary(congruent.digits.mod)
-
-# bayesian regression on mean drt values
-regressionBF(drt ~ number, data = drt.congruent.digits %>%
-               dplyr::group_by(number) %>%
-               dplyr::summarise(drt = mean(drt)))
-
-# calculating mean and SEM of drt
-drt.congruent.error <- summarySE(drt.congruent.digits, measurevar = "drt", groupvars = c("number"))
-
-# plotting linear regression of drt for congruent condition
-drt.congruent.plot <- ggplot() +
-  geom_hline(yintercept = 0) +
-  geom_point(data = drt.congruent.error, mapping = aes(x = number, y = drt)) +
-  geom_abline(slope = coef(congruent.digits.mod)["number"], 
-              intercept = coef(congruent.digits.mod)["(Intercept)"], linetype = "dashed") +
-  geom_errorbar(data = drt.congruent.error, mapping = aes(x = number, y = drt, ymin = drt - se, ymax = drt + se), width = 0.1) +
-  ylim(-50, 50) +
-  ggtitle("A: Congruent") +
-  ylab("dRT (ms)") +
-  xlab("Number") +
-  theme_plot +
-  theme(legend.position = c(0.25, 0.85), legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7)) 
-
-"2) Incongruent"
-drt.incongruent.digits <- dat_clean %>%
-  dplyr::filter(Congruent == "Incong", Condition == "Digit", ppid != 45, ppid != 5, outlier == FALSE) %>%
-  dplyr::group_by(number, key_response, ppid) %>%
-  dplyr::summarise(meanMS = mean(ms)) %>%
-  dplyr::ungroup() %>%
-  tidyr::pivot_wider(names_from = key_response, values_from = meanMS) %>%
-  dplyr::group_by(number, ppid) %>%
-  dplyr::summarise(drt = (l - a)) %>%
-  tidyr::drop_na()
-
-# frequentist linear regression on mean drt values
-incongruent.digits.mod <- lm(drt ~ number, data = drt.incongruent.digits %>%
-                        dplyr::group_by(number) %>%
-                        dplyr::summarise(drt = mean(drt)))
-
-summary(incongruent.digits.mod)
-
-# bayesian regression on mean drt values
-regressionBF(drt ~ number, data = drt.incongruent.digits %>%
-               dplyr::group_by(number) %>%
-               dplyr::summarise(drt = mean(drt)))
-
-
-# mean and SEM of drt
-drt.incongruent.error <- summarySE(drt.incongruent.digits, measurevar = "drt", groupvars = c("number"))
-
-# plotting linear regression of drt for congruent condition
-drt.incongruent.plot <- ggplot() +
-  geom_hline(yintercept = 0) +
-  geom_point(data = drt.incongruent.error, mapping = aes(x = number, y = drt)) +
-  geom_abline(slope = coef(incongruent.digits.mod)["number"], 
-              intercept = coef(incongruent.digits.mod)["(Intercept)"], linetype = "dashed") +
-  geom_errorbar(data = drt.incongruent.error, mapping = aes(x = number, y = drt, ymin = drt - se, ymax = drt + se), width = 0.1) +
-  ylim(-50, 50) +
-  ggtitle("B: Incongruent") +
-  ylab("dRT (ms)") +
-  xlab("Number") +
-  theme_plot +
-  theme(legend.position = c(0.25, 0.85), legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7)) 
-
-"saving plots"
-g <- arrangeGrob(drt.congruent.plot, drt.incongruent.plot, nrow = 1)
-  ggsave(here::here("Parity_DvN_SNARC/Plots/Digits_Linear.tiff"), g,  width = 15, height = 7, units = 'cm', dpi = 900, type = 'cairo')
-```
-
 
 ## RM ANOVA for reaction time data - Non-symbolic numerals (numerosity)
 
@@ -384,7 +362,7 @@ Once this is done, the ANOVA is computed.
 "1) RM ANOVA"
 numerosity.dat <- dat_clean %>%
   dplyr::ungroup() %>%
-  dplyr::filter(Condition == "Numerosity", outlier == FALSE) %>%
+  dplyr::filter(Condition == "Numerosity", outlier == FALSE, ppid != 39, ppid != 20) %>%
   dplyr::mutate(magnitude_new = case_when(number < 3 & Congruent ==  "Incong" ~ "large",
                                       number > 3 & Congruent ==  "Incong" ~ "small",
                                       number < 3 & Congruent == "Cong" ~ "small",
@@ -399,9 +377,8 @@ aov.n.em <- emmeans(aov.n, c("hand", "magnitude_new", "Congruent"))
 pairs(aov.n.em)
 
 "2) descriptives"
-numerosity.dat %>%
-  dplyr::group_by(Congruent, hand, magnitude_new) %>%
-  dplyr::summarise(m = mean(ms))
+View(summarySE(numerosity.dat, measurevar = "ms", groupvars = c("hand", "magnitude_new", "Congruent")) %>%
+       dplyr::arrange(hand, magnitude_new))
 
 "3)"
 summary.n <- summarySE(numerosity.dat, measurevar = "ms", groupvars = c("hand", "magnitude_new", "Congruent"))
@@ -449,96 +426,3 @@ incongruent.snarc.n <- ggplot() +
 g <- arrangeGrob(congruent.snarc.n, incongruent.snarc.n, nrow = 1)
   ggsave(here::here("Parity_DvN_SNARC/Plots/Num.tiff"), g,  width = 15, height = 7, units = 'cm', dpi = 900, type = 'cairo')
 ```
-
-# Numerosity data - lineare regression
-
-```{r}
-"1) Congruent"
-drt.congruent.digits <- numerosity.dat %>%
-  dplyr::filter(Congruent == "Cong", ppid != 45, ppid != 5, outlier == FALSE) %>%
-  dplyr::group_by(number, key_response, ppid) %>%
-  dplyr::summarise(meanMS = mean(ms)) %>%
-  dplyr::ungroup() %>%
-  tidyr::pivot_wider(names_from = key_response, values_from = meanMS) %>%
-  dplyr::group_by(number, ppid) %>%
-  dplyr::summarise(drt = (l - a)) %>%
-  tidyr::drop_na()
-
-# frequentist linear regression on mean drt values
-congruent.digits.mod <- lm(drt ~ number, data = drt.congruent.digits %>%
-                        dplyr::group_by(number) %>%
-                        dplyr::summarise(drt = mean(drt)))
-
-summary(congruent.digits.mod)
-
-# bayesian regression on mean drt values
-regressionBF(drt ~ number, data = drt.congruent.digits %>%
-               dplyr::group_by(number) %>%
-               dplyr::summarise(drt = mean(drt)))
-
-# calculating mean and SEM of drt
-drt.congruent.error <- summarySE(drt.congruent.digits, measurevar = "drt", groupvars = c("number"))
-
-# plotting linear regression of drt for congruent condition
-drt.congruent.plot <- ggplot() +
-  geom_hline(yintercept = 0) +
-  geom_point(data = drt.congruent.error, mapping = aes(x = number, y = drt)) +
-  geom_abline(slope = coef(congruent.digits.mod)["number"], 
-              intercept = coef(congruent.digits.mod)["(Intercept)"], linetype = "dashed") +
-  geom_errorbar(data = drt.congruent.error, mapping = aes(x = number, y = drt, ymin = drt - se, ymax = drt + se), width = 0.1) +
-  ylim(-50, 50) +
-  ggtitle("A: Congruent") +
-  ylab("dRT (ms)") +
-  xlab("Number") +
-  theme_plot +
-  theme(legend.position = c(0.25, 0.85), legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7)) 
-
-"2) Incongruent"
-drt.incongruent.digits <- numerosity.dat %>%
-  dplyr::filter(Congruent == "Incong", ppid != 45, ppid != 5, outlier == FALSE) %>%
-  dplyr::group_by(number, key_response, ppid) %>%
-  dplyr::summarise(meanMS = mean(ms)) %>%
-  dplyr::ungroup() %>%
-  tidyr::pivot_wider(names_from = key_response, values_from = meanMS) %>%
-  dplyr::group_by(number, ppid) %>%
-  dplyr::summarise(drt = (l - a)) %>%
-  tidyr::drop_na()
-
-# frequentist linear regression on mean drt values
-incongruent.digits.mod <- lm(drt ~ number, data = drt.incongruent.digits %>%
-                        dplyr::group_by(number) %>%
-                        dplyr::summarise(drt = mean(drt)))
-
-summary(incongruent.digits.mod)
-
-# bayesian regression on mean drt values
-regressionBF(drt ~ number, data = drt.incongruent.digits %>%
-               dplyr::group_by(number) %>%
-               dplyr::summarise(drt = mean(drt)))
-
-
-# mean and SEM of drt
-drt.incongruent.error <- summarySE(drt.incongruent.digits, measurevar = "drt", groupvars = c("number"))
-
-# plotting linear regression of drt for congruent condition
-drt.incongruent.plot <- ggplot() +
-  geom_hline(yintercept = 0) +
-  geom_point(data = drt.incongruent.error, mapping = aes(x = number, y = drt)) +
-  geom_abline(slope = coef(incongruent.digits.mod)["number"], 
-              intercept = coef(incongruent.digits.mod)["(Intercept)"], linetype = "dashed") +
-  geom_errorbar(data = drt.incongruent.error, mapping = aes(x = number, y = drt, ymin = drt - se, ymax = drt + se), width = 0.1) +
-  ylim(-50, 50) +
-  ggtitle("B: Incongruent") +
-  ylab("dRT (ms)") +
-  xlab("Number") +
-  theme_plot +
-  theme(legend.position = c(0.25, 0.85), legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7)) 
-
-"saving plots"
-g <- arrangeGrob(drt.congruent.plot, drt.incongruent.plot, nrow = 1)
-  ggsave(here::here("Parity_DvN_SNARC/Plots/Numerosity_Linear.tiff"), g,  width = 15, height = 7, units = 'cm', dpi = 900, type = 'cairo')
-```
-
-
-
-
