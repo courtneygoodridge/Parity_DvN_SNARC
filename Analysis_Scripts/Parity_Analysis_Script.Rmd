@@ -94,6 +94,21 @@ dat_clean <- dat_clean %>%
   dplyr::arrange(number) %>%
   dplyr::mutate(x = row_number())
 
+"creating parity tag"
+dat_clean <- dat_clean %>%
+  dplyr::mutate(parity = case_when(number == 1 ~ "odd",
+                                   number == 2 ~ "even",
+                                   number == 4 ~ "even",
+                                   number == 5 ~ "odd"))
+
+"creating number of digits tag"
+dat_clean <- dat_clean %>%
+  dplyr::mutate(no.digits = case_when(magnitude == "small" & parity == "odd" ~ 1,
+                                      magnitude == "small" & parity == "even" ~ 2,
+                                      magnitude == "large" & parity == "odd" ~ 5,
+                                      magnitude == "large" & parity == "even" ~ 4))
+
+
 "creating participant tag"
 ppid <- dat_clean %>%
   dplyr::group_by(participant) %>%
@@ -108,9 +123,13 @@ dat_clean <- merge(dat_clean, ppid, by = c("participant"))
 
 ## Calculate demographic information
 
-*Participant 72* has not given their age. Should we remove this data from the sample? 
+*Participant 72* has not given their age and is therefore removed from the sample. 
 
 ```{r}
+# removing participant 72
+dat_clean <- dat_clean %>%
+  dplyr::filter(ppid != 72)
+
 # total number of participants
 dat_clean %>%
   dplyr::group_by(ppid) %>%
@@ -147,11 +166,8 @@ dat_clean %>%
   dplyr::ungroup() %>%
   dplyr::summarise(mean.age = mean(age), sd.age = sd(age), min.age = min(age), max.age = max(age)) %>%
   View()
-
-# removing participant 72
-dat_clean <- dat_clean %>%
-  dplyr::filter(ppid != 72)
 ```
+
 ## Errors and misses for individual participants
 
 1) Calculates percentage of errors per participant per condition. 
@@ -426,3 +442,53 @@ incongruent.snarc.n <- ggplot() +
 g <- arrangeGrob(congruent.snarc.n, incongruent.snarc.n, nrow = 1)
   ggsave(here::here("Parity_DvN_SNARC/Plots/Num.tiff"), g,  width = 15, height = 7, units = 'cm', dpi = 900, type = 'cairo')
 ```
+
+## Linear regression analysis - Symbolic numerals (digits)
+
+```{r}
+# computing drt
+drt.congruent.digits <- dat_clean %>%
+  dplyr::filter(Congruent == "Cong", Condition == "Digit", outlier == FALSE, ppid != 39, ppid != 20) %>%
+  dplyr::group_by(number, key_response, ppid) %>%
+  dplyr::summarise(meanMS = mean(ms)) %>%
+  dplyr::ungroup() %>%
+  tidyr::pivot_wider(names_from = key_response, values_from = meanMS) %>%
+  dplyr::group_by(number, ppid) %>%
+  dplyr::summarise(drt = (l - a)) %>%
+  tidyr::drop_na()
+
+# fitting linear regression
+congruent.digits.mod <- lm(drt ~ number, data = drt.congruent.digits %>%
+                        dplyr::group_by(number) %>%
+                        dplyr::summarise(drt = mean(drt)))
+
+summary(congruent.digits.mod)
+
+# calculating mean and SEM of drt
+drt.congruent.means<- summarySE(drt.congruent.digits, measurevar = "drt", groupvars = c("number"))
+
+# plotting linear regression of drt for congruent condition
+ggplot() +
+  geom_hline(yintercept = 0) +
+  geom_point(data = drt.congruent.means, mapping = aes(x = number, y = drt)) +
+  geom_abline(slope = coef(congruent.digits.mod)["number"], 
+              intercept = coef(congruent.digits.mod)["(Intercept)"], linetype = "dashed") +
+  geom_errorbar(data = drt.congruent.means, mapping = aes(x = number, y = drt, ymin = drt - se, ymax = drt + se), width = 0.1) +
+  ylim(-80, 80) +
+  ggtitle("A: Congruent") +
+  ylab("dRT (ms)") +
+  xlab("Number") +
+  theme_plot +
+  theme(legend.position = c(0.25, 0.85), legend.key.height = unit(0, 'cm'), legend.key = element_blank(), legend.key.width = unit(0.5, 'cm'), legend.key.size = unit(0, 'cm'), plot.title = element_text(size = 12, face = "bold"), panel.spacing = unit(2, "lines"), axis.title.x = element_text(size = 9), axis.text.x = element_text(size = 9), axis.title.y = element_text(size = 9), axis.text.y = element_text(size = 9), title = element_text(size = 7), legend.title = element_text(size = 7), legend.text = element_text(size = 7)) 
+
+```
+
+## Linear regression analysis - Non-Symbolic numerals (digits)
+
+```{r}
+digits.linear <- dat_clean %>%
+  dplyr::filter(Condition == "Digits")
+
+
+```
+
