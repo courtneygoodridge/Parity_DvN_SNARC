@@ -10,8 +10,4 @@ The code, analysis, and data in the current respository is a conceptual replicat
 
 ## Code and analysis
 
-The `Parity_Analysis_Script.Rmd` analysis script can be found in the analysis folder. In order to run this analysis script, clone the `Parity_DvN_SNARC` repository into your working directory (you can find this by running the here::here() function in the R command line). For more information on using the `here::here()`, see the [documentation](https://here.r-lib.org/). Once the repository is in your working directory, run each chunk of code. The data used can be found in the data folder as is called `Final Data parity.xlsx`. 
-
-
-
-The experiment is running online and the data collection is still in progress.
+The `Parity_Analysis_Script.Rmd` analysis script can be found in the analysis folder. In order to run this analysis script, clone the `Parity_DvN_SNARC` repository into your working directory (you can find this by running the here::here() function in the R command line). For more information on using the `here::here()`, see the [documentation](https://here.r-lib.org/). Once the repository is in your working directory, run each chunk of code. The data has been removed for now as this experiment is still ongoing. However, a draft write up of the results can be found in the Manuscript folder, alongside some plots in the Plots folder. 
