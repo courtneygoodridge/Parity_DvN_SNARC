@@ -199,7 +199,9 @@ error_ppid <- dat_clean %>%
   dplyr::group_by(ppid) %>%
   dplyr::mutate(perc = (acc_num / sum(acc_num)) * 100) %>%
   dplyr::ungroup() %>%
-  dplyr::filter(correct == 0) %>%
+  dplyr::filter(correct == 0)
+
+error_ppid %>%
   View()
 
 "3) average number of errors"
@@ -483,12 +485,4 @@ ggplot() +
 
 ```
 
-## Linear regression analysis - Non-Symbolic numerals (digits)
-
-```{r}
-digits.linear <- dat_clean %>%
-  dplyr::filter(Condition == "Digits")
-
-
-```
 
