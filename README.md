@@ -10,6 +10,18 @@ The code, analysis, and data in the current respository is a conceptual replicat
 
 ## Code and analysis
 
-The `Parity_Analysis_Script.Rmd` analysis script can be found in the analysis folder. The data has been removed for now as this experiment is still ongoing. However, a draft write up of the results can be found in the Manuscript folder, alongside some plots in the Plots folder. Furthermore, the code may be useful to researchers who want to analyse their own SNARC effect data and produce plots. When the final data is provided, running the analysis script will involve cloning the `Parity_DvN_SNARC` repository into your working directory (you can find this by running the here::here() function in the R command line). For more information on using the `here::here()`, see the [documentation](https://here.r-lib.org/). Once the repository is in your working directory, run each chunk of code in turn.
+The `Dice_SNARC2.zip` file contains the [PsychoPy](https://www.psychopy.org/) script that runs the experiment. PsychoPy is a free software tool that allows researchers to run Psychology experiments using open source software. The `.xlsx` files are used by the PsychoPy scripts to render the stimuli for the experiment.
 
-The `Dice_SNARC2.zip` file contains the [PsychoPy](https://www.psychopy.org/) script that runs the experiment. PsychoPy is a free software tool that allows researchers to run Psychology experiments using open source software. 
+The `Parity_Analysis_Script.Rmd` analysis script can be found in the analysis folder. To run the analysis, glone the `Parity_DvN_SNARC` repository into your working directory (you can find this by running the here::here() function in the R command line). For more information on using the `here::here()`, see the [documentation](https://here.r-lib.org/). Once the repository is in your working directory, run each chunk of code in turn. Session information is provided below in the case of package dependencies. A draft write up of the results can be found in the Manuscript folder, alongside some plots in the Plots folder. 
+
+## Session info
+
+`sessioninfo()`
+
+<img width="295" alt="image" src="https://github.com/courtneygoodridge/Parity_DvN_SNARC/assets/44811378/53d76452-512e-445b-a85b-2b4a4462ed3c">
+
+
+
+
+
+
