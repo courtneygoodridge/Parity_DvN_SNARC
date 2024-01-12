@@ -1,4 +1,4 @@
-# Parity experiment: Digits vs Numerosity
+# Parity pilot experiment: Digits vs Numerosity
 
 **Disclaimer**: *This is a working repository and so information and code may change.*
 
